@@ -9,29 +9,49 @@ def is_end_of_line(y, x, lines):
 
 def modify_selected_text(lines, selection_start, selection_end, modify_function):
     if not selection_start or not selection_end:
-        return lines
+        return lines, (0, 0)  # Return default cursor position if no selection
 
     # Determine the start and end points correctly
     start_y, start_x = min(selection_start, selection_end)
     end_y, end_x = max(selection_start, selection_end)
 
-    # Extract and modify the selected text
+    # Extract the selected text
     selected_text = extract_selected_text((start_y, start_x), (end_y, end_x), lines)
+
+    # Apply modification function to the selected text
     modified_text = modify_function(selected_text)
     modified_lines = modified_text.split("\n")
 
     # Merge the modified text back into the lines
     if start_y == end_y:
+        # Modification within a single line
         lines[start_y] = lines[start_y][:start_x] + modified_text + lines[end_y][end_x:]
     else:
+        # Modification spans multiple lines
         lines[start_y] = lines[start_y][:start_x] + modified_lines[0]
-        lines[end_y] = modified_lines[-1] + lines[end_y][end_x:]
-        lines[start_y + 1 : end_y] = modified_lines[1:-1]
+
+        # Handle multiple modified lines
+        if len(modified_lines) > 1:
+            lines[end_y] = modified_lines[-1] + lines[end_y][end_x:]
+            lines[start_y + 1 : end_y] = modified_lines[1:-1]
+        else:
+            # Concatenate parts of the start and end line if modified_text is empty
+            lines[start_y] = lines[start_y][:start_x] + lines[end_y][end_x:]
+            del lines[start_y + 1 : end_y + 1]
 
     # Remove any empty lines that may have been introduced
     lines = [line for line in lines if line.strip() != ""]
 
-    return lines
+    # Calculate the new cursor position
+    new_y, new_x = start_y, start_x
+    if new_y >= len(lines):  # Ensure new_y is within the range of lines
+        new_y = max(0, len(lines) - 1)
+    if lines:  # Ensure lines list is not empty
+        new_x = min(new_x, len(lines[new_y]))
+    else:  # If lines list is empty, reset cursor to (0, 0)
+        new_y, new_x = 0, 0
+
+    return lines, (new_y, new_x)
 
 
 def move_to_next_word(y, x, lines, backward=False):
@@ -112,6 +132,10 @@ def extract_selected_text(start, end, lines):
 
 
 def insert_character_at_cursor(lines, y, x, char):
+    if not lines:  # If lines is empty, add a new line
+        lines.append("")
+        y, x = 0, 0
+
     # Insert the character at the cursor location
     lines[y] = lines[y][:x] + char + lines[y][x:]
     return lines
@@ -133,7 +157,8 @@ def load_file(file_path):
 
 def save_file(file_path, lines):
     with open(file_path, "w") as file:
-        file.write("\n".join(lines))
+        trimmed_lines = [line.rstrip() for line in lines]
+        file.write("\n".join(trimmed_lines))
 
 
 def main(stdscr, file_path):
@@ -200,7 +225,18 @@ def main(stdscr, file_path):
                     modify_function = (
                         lambda text: text.upper()
                     )  # Example: Convert to uppercase
-                    lines = modify_selected_text(
+                    lines, (y, x) = modify_selected_text(
+                        lines, selection_start, selection_end, modify_function
+                    )
+                    selection_start = None
+                    selection_end = None
+                    is_selecting = False
+                    # Validate cursor position
+                    y = min(y, len(lines) - 1)
+                    x = min(x, len(lines[y]) if lines else 0)
+                elif key == ord("u") and alt_pressed:  # Alt-u
+                    modify_function = lambda text: ""  # Delete
+                    lines, (y, x) = modify_selected_text(
                         lines, selection_start, selection_end, modify_function
                     )
                     selection_start = None
@@ -286,39 +322,56 @@ def main(stdscr, file_path):
                     is_selecting = False
                 is_navigation_command = False
             elif key == curses.KEY_ENTER or key == ord("\n"):  # Handle Enter key
-                lines[y] = lines[y][:x] + "\n" + lines[y][x:]
-                y += 1
-                x = 0
-                lines.insert(y, "")  # Insert a new empty line
+                # Split the current line at the cursor position
+                lines.insert(
+                    y + 1, lines[y][x:]
+                )  # Move the rest of the line to the next line
+                lines[y] = lines[y][
+                    :x
+                ]  # Keep only the part of the line before the cursor
+                y = min(y + 1, len(lines) - 1)
+                x = 0  # Reset cursor position to the start of the line
 
             elif key == ord("\t"):  # Handle Tab key
                 tab_spaces = "    "  # Represent a tab as 4 spaces (or use "\t" for a tab character)
                 lines[y] = lines[y][:x] + tab_spaces + lines[y][x:]
                 x += len(tab_spaces)
-
             elif key == curses.KEY_DC or key == ord("\x7f"):  # Delete or Backspace
+                if not lines:  # If lines list is empty, reset cursor
+                    y, x = 0, 0
+
                 if (
                     x == 0 and y > 0
                 ):  # If at the beginning of a line, merge with the previous line
-                    prev_line_len = len(
-                        lines[y - 1].rstrip()
-                    )  # Remove trailing spaces from the previous line
                     lines[y - 1] = (
-                        lines[y - 1].rstrip() + lines[y]
-                    )  # Merge without adding extra spaces
+                        lines[y - 1].rstrip() + lines[y].lstrip()
+                    )  # Merge lines without extra spaces
                     del lines[y]  # Remove the current line
                     y -= 1
-                    x = prev_line_len  # Position the cursor at the end of the merged line
+                    x = len(
+                        lines[y]
+                    )  # Position the cursor at the end of the merged line
                 elif x > 0:
                     lines[y] = (
                         lines[y][: x - 1] + lines[y][x:]
                     )  # Remove the character before the cursor
                     x -= 1  # Move cursor left
+
+                if not lines:  # If all lines are deleted
+                    lines.append("")  # Add an empty line
+                    y, x = 0, 0  # Reset cursor position
+
+                # Validate cursor position
+                y = min(y, len(lines) - 1)
+                x = min(x, len(lines[y]) if lines else 0)
             elif key >= 32 and key <= 126:  # Insert printable character
                 if not is_selecting:
                     char = chr(key)
                     lines = insert_character_at_cursor(lines, y, x, char)
                     x += 1  # Move cursor right
+                    # Validate cursor position
+                    y = min(y, len(lines) - 1)
+                    x = min(x, len(lines[y]) if lines else 0)
                     is_navigation_command = True
                 else:
                     selection_start = None
@@ -328,6 +381,11 @@ def main(stdscr, file_path):
             elif is_selecting:
                 selection_end = (y, x)
 
+            # Validate cursor position
+            y = min(y, len(lines) - 1)
+            x = min(x, len(lines[y]) if lines else 0)
+
+            # Refresh the screen
             stdscr.refresh()
         except KeyboardInterrupt:
             sys.exit(0)
