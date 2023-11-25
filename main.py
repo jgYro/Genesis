@@ -21,7 +21,7 @@ def find_pair_boundaries(y, x, lines):
         # Search backward for the start character
         cur_x = x
         while cur_x >= 0:
-            if lines[y][cur_x] == start_char:
+            if cur_x < len(lines[y]) and lines[y][cur_x] == start_char:
                 start_pos = (y, cur_x)
                 break
             cur_x -= 1
@@ -79,7 +79,8 @@ def alt_p_logic(y, x, lines, selection_stage):
 
 
 def find_word_boundaries(y, x, lines, current_selection):
-    if not lines or not lines[y] or not lines[y][x].isalnum():
+    # Check if the cursor is beyond the end of the line
+    if not lines or y >= len(lines) or x >= len(lines[y]):
         return (y, x), (y, x), False  # No word at the cursor
 
     start_x, end_x = x, x
