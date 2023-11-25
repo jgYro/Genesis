@@ -149,15 +149,20 @@ def move_to_next_word(y, x, lines, backward=False):
         return move_to_previous_word(y, x, lines)
 
     if y >= len(lines) - 1 and x >= len(lines[y]) - 1:
-        # If at the last word of the last line, do nothing
+        # If at the last word of the last line, move to the beginning of the next line
+        if y < len(lines) - 1:
+            y += 1
+            x = 0
         return y, x
 
     # Check if we're currently in the middle of a word
     in_word = x < len(lines[y]) and lines[y][x].isalnum()
 
-    # If we're not in a word, move to the start of the next word
+    # If we're not in a word, move to the start of the next word or next line
     if not in_word:
-        while y < len(lines) and x < len(lines[y]) and not lines[y][x].isalnum():
+        while y < len(lines) and x < len(lines[y]):
+            if lines[y][x].isalnum():
+                break
             x += 1
             if x >= len(lines[y]):
                 y += 1
@@ -166,8 +171,16 @@ def move_to_next_word(y, x, lines, backward=False):
                     return len(lines) - 1, len(lines[-1]) - 1
 
     # Move to the end of the current or next word
-    while y < len(lines) and x < len(lines[y]) and lines[y][x].isalnum():
+    while y < len(lines) and x < len(lines[y]):
+        if not lines[y][x].isalnum():
+            break
         x += 1
+
+    # If no more words on the same line, move to the beginning of the next line
+    if x >= len(lines[y]):
+        if y < len(lines) - 1:
+            y += 1
+            x = 0
 
     return y, x
 
