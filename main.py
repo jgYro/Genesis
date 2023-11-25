@@ -7,6 +7,23 @@ def is_end_of_line(y, x, lines):
     return x >= len(lines[y])
 
 
+def find_word_boundaries(y, x, lines):
+    if not lines or not lines[y] or not lines[y][x].isalnum():
+        return (y, x), (y, x)  # No word at the cursor
+
+    start_x, end_x = x, x
+
+    # Find the start of the word
+    while start_x > 0 and lines[y][start_x - 1].isalnum():
+        start_x -= 1
+
+    # Find the end of the word
+    while end_x < len(lines[y]) and lines[y][end_x].isalnum():
+        end_x += 1
+
+    return (y, start_x), (y, end_x)
+
+
 def modify_selected_text(lines, selection_start, selection_end, modify_function):
     if not selection_start or not selection_end:
         return lines, (0, 0)  # Return default cursor position if no selection
@@ -221,6 +238,10 @@ def main(stdscr, file_path):
                     y, x = move_to_previous_word(y, x, lines)
                     if is_selecting:
                         selection_end = (y, x)
+                elif key == ord("n") and alt_pressed:  # Alt-n
+                    selection_start, selection_end = find_word_boundaries(y, x, lines)
+                    is_selecting = True
+                    alt_pressed = False
                 elif key == ord("m") and alt_pressed:  # Alt-m
                     modify_function = (
                         lambda text: text.upper()
