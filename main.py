@@ -7,9 +7,9 @@ def is_end_of_line(y, x, lines):
     return x >= len(lines[y])
 
 
-def find_word_boundaries(y, x, lines):
+def find_word_boundaries(y, x, lines, current_selection):
     if not lines or not lines[y] or not lines[y][x].isalnum():
-        return (y, x), (y, x)  # No word at the cursor
+        return (y, x), (y, x), False  # No word at the cursor
 
     start_x, end_x = x, x
 
@@ -21,7 +21,8 @@ def find_word_boundaries(y, x, lines):
     while end_x < len(lines[y]) and lines[y][end_x].isalnum():
         end_x += 1
 
-    return (y, start_x), (y, end_x)
+    entire_word_selected = current_selection == ((y, start_x), (y, end_x))
+    return (y, start_x), (y, end_x), entire_word_selected
 
 
 def modify_selected_text(lines, selection_start, selection_end, modify_function):
@@ -239,9 +240,54 @@ def main(stdscr, file_path):
                     if is_selecting:
                         selection_end = (y, x)
                 elif key == ord("n") and alt_pressed:  # Alt-n
-                    selection_start, selection_end = find_word_boundaries(y, x, lines)
+                    (
+                        new_selection_start,
+                        new_selection_end,
+                        entire_word_selected,
+                    ) = find_word_boundaries(
+                        y, x, lines, (selection_start, selection_end)
+                    )
+                    if entire_word_selected:
+                        # If the entire word is already selected, select the whole line
+                        selection_start, selection_end = (y, 0), (y, len(lines[y]))
+                    else:
+                        # Otherwise, select the word
+                        selection_start, selection_end = (
+                            new_selection_start,
+                            new_selection_end,
+                        )
                     is_selecting = True
                     alt_pressed = False
+                elif key == ord("p") and alt_pressed:  # Alt-p
+                    if (
+                        is_selecting
+                        and selection_start[0] == y
+                        and selection_start[1] == 0
+                        and selection_end[0] == y
+                        and selection_end[1] == len(lines[y])
+                    ):
+                        # If the entire line is selected, shrink to the current word
+                        (
+                            new_selection_start,
+                            new_selection_end,
+                            _,
+                        ) = find_word_boundaries(
+                            y, x, lines, (selection_start, selection_end)
+                        )
+                        if new_selection_start != new_selection_end:
+                            # If a word is found at the cursor, select it
+                            selection_start, selection_end = (
+                                new_selection_start,
+                                new_selection_end,
+                            )
+                        else:
+                            # If no word at the cursor, clear the selection
+                            is_selecting = False
+                    else:
+                        # If not selecting the whole line, clear the selection
+                        is_selecting = False
+                    alt_pressed = False
+
                 elif key == ord("m") and alt_pressed:  # Alt-m
                     modify_function = (
                         lambda text: text.upper()
