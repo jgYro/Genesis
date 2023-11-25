@@ -7,6 +7,77 @@ def is_end_of_line(y, x, lines):
     return x >= len(lines[y])
 
 
+PAIR_CHARS = {('"', '"'), ("'", "'"), ("(", ")"), ("[", "]"), ("<", ">"), ("{", "}")}
+
+
+def find_pair_boundaries(y, x, lines):
+    """
+    Find the boundaries of pairs like "", '', {}, [], and ().
+    Returns ((start_y, start_x), (end_y, end_x)) if a pair is found, otherwise None.
+    """
+    for start_char, end_char in PAIR_CHARS:
+        start_pos, end_pos = None, None
+
+        # Search backward for the start character
+        cur_x = x
+        while cur_x >= 0:
+            if lines[y][cur_x] == start_char:
+                start_pos = (y, cur_x)
+                break
+            cur_x -= 1
+
+        # Search forward for the end character
+        cur_x = x
+        while cur_x < len(lines[y]):
+            if lines[y][cur_x] == end_char:
+                end_pos = (y, cur_x + 1)  # Include the end character in the selection
+                break
+            cur_x += 1
+
+        if start_pos and end_pos:
+            return start_pos, end_pos
+
+    return None
+
+
+def alt_n_logic(y, x, lines, selection_stage):
+    """
+    Logic for alt-n key press. Cycles through selection stages.
+    """
+    if selection_stage == 0:  # Word selection
+        start, end, _ = find_word_boundaries(y, x, lines, None)
+        return start, end, 1  # Move to next stage
+    elif selection_stage == 1:  # Pair selection
+        pair_boundaries = find_pair_boundaries(y, x, lines)
+        if pair_boundaries:
+            return pair_boundaries[0], pair_boundaries[1], 2
+        else:
+            # If no pair is found, skip directly to line selection
+            return (y, 0), (y, len(lines[y])), 3
+    elif selection_stage == 2:  # Line selection
+        return (y, 0), (y, len(lines[y])), 3
+    else:  # Reset selection
+        return (y, x), (y, x), 0
+
+
+def alt_p_logic(y, x, lines, selection_stage):
+    """
+    Logic for alt-p key press. Reverse cycles through selection stages.
+    """
+    if selection_stage <= 0:  # No selection
+        return (y, x), (y, x), 0
+    elif selection_stage == 1:  # Word selection
+        return (y, x), (y, x), 0
+    elif selection_stage == 2:  # Pair selection
+        start, end, _ = find_word_boundaries(y, x, lines, None)
+        return start, end, 1
+    elif selection_stage == 3:  # Line selection
+        pair_boundaries = find_pair_boundaries(y, x, lines)
+        if pair_boundaries:
+            return pair_boundaries[0], pair_boundaries[1], 2
+        return (y, 0), (y, len(lines[y])), 2
+
+
 def find_word_boundaries(y, x, lines, current_selection):
     if not lines or not lines[y] or not lines[y][x].isalnum():
         return (y, x), (y, x), False  # No word at the cursor
@@ -196,6 +267,7 @@ def main(stdscr, file_path):
     is_selecting = False
     extend_selection_forward = True  # Flag to extend the selection forward or backward
     is_navigation_command = False
+    selection_stage = 0  # Initialize the selection stage
 
     while True:
         try:
@@ -240,54 +312,15 @@ def main(stdscr, file_path):
                     if is_selecting:
                         selection_end = (y, x)
                 elif key == ord("n") and alt_pressed:  # Alt-n
-                    (
-                        new_selection_start,
-                        new_selection_end,
-                        entire_word_selected,
-                    ) = find_word_boundaries(
-                        y, x, lines, (selection_start, selection_end)
+                    selection_start, selection_end, selection_stage = alt_n_logic(
+                        y, x, lines, selection_stage
                     )
-                    if entire_word_selected:
-                        # If the entire word is already selected, select the whole line
-                        selection_start, selection_end = (y, 0), (y, len(lines[y]))
-                    else:
-                        # Otherwise, select the word
-                        selection_start, selection_end = (
-                            new_selection_start,
-                            new_selection_end,
-                        )
                     is_selecting = True
-                    alt_pressed = False
                 elif key == ord("p") and alt_pressed:  # Alt-p
-                    if (
-                        is_selecting
-                        and selection_start[0] == y
-                        and selection_start[1] == 0
-                        and selection_end[0] == y
-                        and selection_end[1] == len(lines[y])
-                    ):
-                        # If the entire line is selected, shrink to the current word
-                        (
-                            new_selection_start,
-                            new_selection_end,
-                            _,
-                        ) = find_word_boundaries(
-                            y, x, lines, (selection_start, selection_end)
-                        )
-                        if new_selection_start != new_selection_end:
-                            # If a word is found at the cursor, select it
-                            selection_start, selection_end = (
-                                new_selection_start,
-                                new_selection_end,
-                            )
-                        else:
-                            # If no word at the cursor, clear the selection
-                            is_selecting = False
-                    else:
-                        # If not selecting the whole line, clear the selection
-                        is_selecting = False
-                    alt_pressed = False
-
+                    selection_start, selection_end, selection_stage = alt_p_logic(
+                        y, x, lines, selection_stage
+                    )
+                    is_selecting = selection_stage != 0
                 elif key == ord("m") and alt_pressed:  # Alt-m
                     modify_function = (
                         lambda text: text.upper()
