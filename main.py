@@ -271,25 +271,26 @@ def main(stdscr, file_path):
                     selection_end = (y, x)
                 is_navigation_command = True
             elif key == curses.KEY_DOWN or key == ord("\x0e"):  # Ctrl-n
-                if extend_selection_forward:
-                    y = min(y + 1, len(lines) - 1)
-                    x = min(x, len(lines[y]))
-                else:
-                    y = max(y - 1, 0)
-                    x = min(x, len(lines[y]))
+                if y >= len(lines) - 1:
+                    # If on the last line, add a new empty line
+                    lines.append("")
+                y = min(y + 1, len(lines) - 1)
+                x = min(x, len(lines[y]))
                 if is_selecting:
                     selection_end = (y, x)
                 is_navigation_command = True
             elif key == curses.KEY_UP or key == ord("\x10"):  # Ctrl-p
-                if extend_selection_forward:
-                    y = max(y - 1, 0)
-                    x = min(x, len(lines[y]))
+                if y == 0:
+                    # If on the first line, insert a new empty line at the beginning
+                    lines.insert(0, "")
+                    # No need to change y, as we want the cursor to move to the new line above
                 else:
-                    y = min(y + 1, len(lines) - 1)
-                    x = min(x, len(lines[y]))
+                    y = max(y - 1, 0)
+                x = min(x, len(lines[y]))
                 if is_selecting:
                     selection_end = (y, x)
                 is_navigation_command = True
+
             elif key == ord("\x01"):  # Ctrl-a
                 x = 0
                 if is_selecting:
